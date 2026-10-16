@@ -1,0 +1,14 @@
+2026-10-15 23:19:08 [INFO] Starting disk fill/cleanup test
+2026-10-15 23:19:08 [INFO] Before test: used=90.13% free=74.41 GiB
+2026-10-15 23:19:08 [INFO] Creating screenshot 1/30: D:\disk_test\photos\.backup_test\screenshot_1792077548796_0000.png
+2026-10-15 23:19:12 [INFO] After file 1: used=90.14% free=74.31 GiB
+2026-10-15 23:19:12 [INFO] Reached fill trigger 10%
+2026-10-15 23:19:12 [INFO] Generated 1 screenshot file(s) in D:\disk_test\photos\.backup_test
+2026-10-15 23:19:12 [INFO] After fill: used=90.14% free=74.31 GiB
+2026-10-15 23:19:12 [INFO] Running cleanup pass
+2026-10-15 23:19:12 [INFO] Cleanup stats: {'threshold_reached': True, 'deleted_files': 1, 'freed_bytes': 104930466, 'errors': 0, 'used_percent_before': 90.14038778437813, 'used_percent_after': 90.12742211756812, 'needed_bytes': 680949368668}
+2026-10-15 23:19:12 [INFO] After cleanup: used=90.13% free=74.41 GiB
+2026-10-15 23:19:12 [INFO] Remaining generated test screenshots: 0
+2026-10-15 23:19:12 [ERROR] FAIL: cleanup target not reached (6%)
+2026-10-15 23:19:12 [ERROR] RESULT: FAIL - see messages above
+2026-10-15 23:19:12 [INFO] Removing test directory D:\disk_test\photos\.backup_test

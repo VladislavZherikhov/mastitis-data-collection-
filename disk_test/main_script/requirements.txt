@@ -1,0 +1,4 @@
+boto3
+numpy
+opencv-python
+python-dotenv

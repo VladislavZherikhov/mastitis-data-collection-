@@ -1,0 +1,21 @@
+2026-10-15 23:16:34 [INFO] Starting disk backup/cleanup pass
+2026-10-15 23:16:34 [INFO] Disk check: mount=D:\ used=729402499072/809301438464 bytes (90.13%), free=79898939392 bytes, threshold=3%, target=1%
+2026-10-15 23:16:34 [WARNING] Threshold reached: 3%
+2026-10-15 23:16:34 [INFO] Need to free at least 721309484687 bytes to reach target 1%
+2026-10-15 23:16:34 [INFO] Found 0 eligible media files older than 0 day(s)
+2026-10-15 23:16:34 [INFO] Cleanup finished: deleted=0 files, freed=0 bytes, errors=0, used now=90.13%, free now=79898939392 bytes
+2026-10-15 23:16:34 [INFO] Finished: {'threshold_reached': True, 'deleted_files': 0, 'freed_bytes': 0, 'errors': 0, 'used_percent_before': 90.12741908087513, 'used_percent_after': 90.12741908087513, 'needed_bytes': 721309484687}
+2026-10-15 23:18:03 [INFO] Starting disk backup/cleanup pass
+2026-10-15 23:18:03 [INFO] Disk check: mount=D:\ used=729402503168/809301438464 bytes (90.13%), free=79898935296 bytes, threshold=5%, target=3%
+2026-10-15 23:18:03 [WARNING] Threshold reached: 5%
+2026-10-15 23:18:03 [INFO] Need to free at least 705123460014 bytes to reach target 3%
+2026-10-15 23:18:03 [INFO] Found 0 eligible media files older than 0 day(s)
+2026-10-15 23:18:03 [INFO] Cleanup finished: deleted=0 files, freed=0 bytes, errors=0, used now=90.13%, free now=79898935296 bytes
+2026-10-15 23:18:03 [INFO] Finished: {'threshold_reached': True, 'deleted_files': 0, 'freed_bytes': 0, 'errors': 0, 'used_percent_before': 90.12741958699063, 'used_percent_after': 90.12741958699063, 'needed_bytes': 705123460014}
+2026-10-15 23:19:12 [INFO] Disk check: mount=D:\ used=729507454976/809301438464 bytes (90.14%), free=79793983488 bytes, threshold=10%, target=6%
+2026-10-15 23:19:12 [WARNING] Threshold reached: 10%
+2026-10-15 23:19:12 [INFO] Need to free at least 680949368668 bytes to reach target 6%
+2026-10-15 23:19:12 [INFO] Found 1 eligible media files older than 0 day(s)
+2026-10-15 23:19:12 [INFO] Deleted D:\disk_test\photos\.backup_test\screenshot_1792077548796_0000.png (size=104930466)
+2026-10-15 23:19:12 [INFO] Cleanup finished: deleted=1 files, freed=104930466 bytes, errors=0, used now=90.13%, free now=79898914816 bytes
+2026-10-15 23:19:12 [WARNING] Could not free enough space: freed 104930466 of 680949368668 needed bytes. Consider lowering MIN_FILE_AGE_DAYS or checking media directories.
