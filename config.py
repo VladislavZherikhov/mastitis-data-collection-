@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 
+from time_windows import parse_windows
+
 
 def _load_env(path: Path) -> None:
     if not path.is_file():
@@ -47,5 +49,18 @@ THERMAL_WIDTH = 256
 THERMAL_HEIGHT = 192
 
 # --- Режим съёмки ---
-SHOTS = int(os.environ.get("SHOTS", 5))
-INTERVAL_SEC = float(os.environ.get("INTERVAL_SEC", 3))
+# пауза между пакетами снимков внутри окна работы
+INTERVAL_SEC = float(os.environ.get("INTERVAL_SEC", 10))
+
+
+def time_windows():
+    """Окна работы из WINDOW_1, WINDOW_2, ... (формат ЧЧ:ММ-ЧЧ:ММ)."""
+    return parse_windows(dict(os.environ))
+
+
+
+# --- Логи ---
+# файлы логов по дням на Pi; по умолчанию папка logs рядом со скриптом
+LOG_DIR = Path(os.environ.get("LOG_DIR") or Path(__file__).resolve().parent / "logs")
+# папка логов в бакете: <LOG_S3_PREFIX>/<hostname>/<дата>.log
+LOG_S3_PREFIX = os.environ.get("LOG_S3_PREFIX", "logs")
