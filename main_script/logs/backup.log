@@ -1,0 +1,2 @@
+2026-10-18 14:46:10 [INFO] Disk check: mount=D:\code\main_script\test_disk used=561654890496/809301438464 bytes (69.40%), free=247646547968 bytes, threshold=80%, target=70%
+2026-10-18 14:46:10 [INFO] Usage below threshold (80%); nothing to do.

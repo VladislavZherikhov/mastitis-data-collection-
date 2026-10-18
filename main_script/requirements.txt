@@ -1,0 +1,5 @@
+boto3
+numpy
+opencv-python
+python-dotenv
+Pillow>=10.0.0
