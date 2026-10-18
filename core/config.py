@@ -1,8 +1,8 @@
-"""Единая точка конфигурации. Секреты берутся из файла .env рядом с этим файлом или из окружения."""
+"""Единая точка конфигурации. Секреты берутся из файла .env в корне проекта или из окружения."""
 import os
 from pathlib import Path
 
-from time_windows import parse_windows
+from core.time_windows import parse_windows
 
 
 def _load_env(path: Path) -> None:
@@ -16,8 +16,9 @@ def _load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-# .env ищем рядом с config.py, а не в текущей папке запуска
-_load_env(Path(__file__).resolve().parent / ".env")
+# корень проекта (где лежат main.py и .env), а не текущая папка запуска
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+_load_env(PROJECT_DIR / ".env")
 
 
 def _required(name: str) -> str:
@@ -58,9 +59,28 @@ def time_windows():
     return parse_windows(dict(os.environ))
 
 
+# --- Локальный диск (storage/local_drive.py) ---
+# точка монтирования диска; пусто - не сохранять пакеты на диск
+DRIVE_MOUNT = os.environ.get("DRIVE_MOUNT", "/mnt/hdd").strip()
+# пакеты лежат в <DRIVE_MOUNT>/<S3_PREFIX>/<дата_время>/ - как в облаке
+DRIVE_MIN_AGE_DAYS = float(os.environ.get("DRIVE_MIN_AGE_DAYS", 1))
+# аварийный минимум свободного места: при меньшем пакеты пишутся только в S3
+DRIVE_MIN_FREE = os.environ.get("DRIVE_MIN_FREE", "1GB")
+
+
+def local_drive():
+    """LocalDrive или None, если сохранение на диск выключено (DRIVE_MOUNT пустой)."""
+    if not DRIVE_MOUNT:
+        return None
+    from storage.local_drive import LocalDrive, limits_from_env, parse_size
+    threshold, target = limits_from_env(dict(os.environ))
+    mount = Path(DRIVE_MOUNT)
+    return LocalDrive(mount, mount / S3_PREFIX.strip("/"), threshold, target, DRIVE_MIN_AGE_DAYS,
+                      min_free=parse_size(DRIVE_MIN_FREE, "DRIVE_MIN_FREE"))
+
 
 # --- Логи ---
-# файлы логов по дням на Pi; по умолчанию папка logs рядом со скриптом
-LOG_DIR = Path(os.environ.get("LOG_DIR") or Path(__file__).resolve().parent / "logs")
+# файлы логов по дням на Pi; по умолчанию папка logs в корне проекта
+LOG_DIR = Path(os.environ.get("LOG_DIR") or PROJECT_DIR / "logs")
 # папка логов в бакете: <LOG_S3_PREFIX>/<hostname>/<дата>.log
 LOG_S3_PREFIX = os.environ.get("LOG_S3_PREFIX", "logs")

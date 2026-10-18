@@ -11,7 +11,7 @@ import threading
 from datetime import date, datetime
 from pathlib import Path
 
-from s3_connection import S3Storage
+from storage.s3 import S3Storage
 
 log = logging.getLogger("logs")
 

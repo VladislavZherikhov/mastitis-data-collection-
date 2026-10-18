@@ -4,7 +4,7 @@ import logging
 import boto3
 from botocore.config import Config
 
-import config
+from core import config
 
 log = logging.getLogger("s3")
 
