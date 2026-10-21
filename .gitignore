@@ -2,3 +2,4 @@
 __pycache__/
 logs/
 Seva_script/
+.main.lock

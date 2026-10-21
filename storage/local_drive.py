@@ -12,7 +12,7 @@
   Сначала удаляются уже выгруженные в S3 (прошлый день, где всё выгружено, - целиком), потом -
   не выгруженные старше DRIVE_MIN_AGE_DAYS;
 - если свободного места меньше DRIVE_MIN_FREE, пакеты на диск не пишутся (только в S3).
-Подробности - в drive_doc.md.
+Подробности - в documentation/drive.md.
 """
 import logging
 import mimetypes
@@ -25,7 +25,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from core.logmarks import IMPORTANT
+
 log = logging.getLogger("drive")
+
+
+class DriveNotMounted(OSError):
+    """Диск не смонтирован (отключён, отвалился по USB, не примонтировался после перезагрузки)."""
 
 DAY_FORMAT = "%Y-%m-%d"                # папка дня
 FOLDER_FORMAT = "%Y-%m-%d_%H-%M-%S"    # папка пакета (и метка времени в именах файлов)
@@ -176,6 +182,10 @@ class LocalDrive:
 
         Сначала пишет во временную папку и только потом переименовывает: переименование
         происходит целиком, поэтому пакет на диске либо полный, либо его нет."""
+        # проверяем при каждой записи: диск может отвалиться посреди окна, и тогда запись
+        # ушла бы в пустую папку /mnt/hdd на SD-карте
+        if not self.is_mounted():
+            raise DriveNotMounted(f"диск {self.mount} не смонтирован")
         size = sum(len(data) for data, _ in files.values())
         if not self._has_room(size):
             return None
@@ -193,6 +203,7 @@ class LocalDrive:
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
+        log.debug("сохранён на диск: %s (%.0f КБ)", target, size / 1024)
 
         self.request_cleanup_if_needed()
         return target
@@ -204,7 +215,8 @@ class LocalDrive:
         if free - size >= self.min_free:
             if self._low_space:
                 self._low_space = False
-                log.info("место на диске освободилось (%s), пакеты снова сохраняются на диск", self.usage_str())
+                log.info("место на диске освободилось (%s), пакеты снова сохраняются на диск", self.usage_str(),
+                         extra=IMPORTANT)
             return True
 
         self._wake.set()
@@ -222,26 +234,44 @@ class LocalDrive:
                 (path / UPLOADED_MARK).touch()
 
     # --- догрузка в S3 того, что не ушло сразу ---
-    def upload_pending(self, s3, until: datetime) -> None:
+    def upload_pending(self, s3, until: datetime, beat=lambda: None) -> None:
         """Догружает в S3 пакеты без метки .uploaded (от старых к новым) до момента until.
-        При первой же ошибке останавливается и пробует снова через retry_sec."""
+        При первой же ошибке останавливается и пробует снова через retry_sec.
+        beat() вызывается после каждого пакета - пульс для сторожа зависаний."""
         if not self.has_backlog or time.monotonic() < self._next_backlog_try or not self.is_mounted():
             return
 
         uploaded = 0
-        for _created, path in self._packages_oldest_first():
+        try:
+            packages = self._packages_oldest_first()
+        except OSError:
+            log.exception("догрузка в S3: не удалось прочитать список пакетов на диске")
+            self._next_backlog_try = time.monotonic() + self.retry_sec
+            return
+        started = time.monotonic()
+        for _created, path in packages:
+            beat()
             if datetime.now() >= until or self._stop.is_set():
+                log.info("догрузка в S3 приостановлена (%s), выгружено %d - продолжу позже",
+                         "начинается окно" if not self._stop.is_set() else "остановка", uploaded, extra=IMPORTANT)
                 break  # начинается окно съёмки (или остановка) - доделаем потом
             # блокировка только на чтение с диска: сама загрузка может долго висеть при плохой сети,
             # и очистка не должна её ждать
-            with self._lock:
-                if not path.is_dir() or self._is_uploaded(path):
-                    continue
-                files = {
-                    f.name: (f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream")
-                    for f in path.iterdir() if f.is_file() and not f.name.startswith(".")
-                }
+            try:
+                with self._lock:
+                    if not path.is_dir() or self._is_uploaded(path):
+                        continue
+                    files = {
+                        f.name: (f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream")
+                        for f in path.iterdir() if f.is_file() and not f.name.startswith(".")
+                    }
+            except OSError:
+                log.exception("догрузка в S3: не удалось прочитать %s с диска", path.name)
+                self._next_backlog_try = time.monotonic() + self.retry_sec
+                break
             folder = path.relative_to(self.data_dir).as_posix()  # "<день>/<дата_время>"
+            if uploaded == 0:
+                log.info("догрузка в S3: на диске есть не выгруженные пакеты, начинаю с %s", folder, extra=IMPORTANT)
             try:
                 s3.upload_shot(folder, files)
             except Exception:
@@ -249,13 +279,20 @@ class LocalDrive:
                               folder, self.retry_sec // 60)
                 self._next_backlog_try = time.monotonic() + self.retry_sec
                 break
-            self.mark_uploaded(folder)
+            try:
+                self.mark_uploaded(folder)
+            except OSError:
+                log.exception("догрузка в S3: не удалось поставить метку для %s", folder)
             uploaded += 1
+            if uploaded % 50 == 0:
+                log.info("догрузка в S3: выгружено %d пакетов (%.0f с), сейчас %s", uploaded,
+                         time.monotonic() - started, folder, extra=IMPORTANT)
         else:
             self.has_backlog = False  # прошли все пакеты без ошибок
 
         if uploaded:
-            log.info("догрузка в S3: выгружено пакетов с диска %d", uploaded)
+            log.info("догрузка в S3: выгружено пакетов с диска %d за %.0f с%s", uploaded, time.monotonic() - started,
+                     ", всё выгружено" if not self.has_backlog else "", extra=IMPORTANT)
 
     # --- очистка ---
     def _reached(self, limit: Limit, *, above: bool) -> bool:
@@ -337,6 +374,8 @@ class LocalDrive:
                     and not any(day_path.glob(TMP_PREFIX + "*"))):
                 if self._remove(day_path):
                     deleted["выгруженных"] += len(packages)
+                    log.info("очистка диска: удалён день %s целиком (%d пакетов, все есть в S3), теперь %s",
+                             day_path.name, len(packages), self.usage_str())
                 continue
             for _created, path in packages:
                 if done():
@@ -352,6 +391,7 @@ class LocalDrive:
                 break
             if not self._is_uploaded(path) and self._remove(path):
                 deleted["не выгруженных в S3"] += 1
+                log.warning("очистка диска: удалён пакет, которого нет в S3: %s", path.relative_to(self.data_dir))
                 self._remove_if_empty(path.parent)
 
         summary = ", ".join(f"{k}: {v}" for k, v in deleted.items())
@@ -359,9 +399,10 @@ class LocalDrive:
             log.warning("очистка диска удалила пакеты, которых нет в S3 (%d) - они потеряны",
                         deleted["не выгруженных в S3"])
         if self._stop.is_set():
-            log.info("очистка диска прервана остановкой скрипта: удалено пакетов (%s), %s", summary, self.usage_str())
+            log.info("очистка диска прервана остановкой скрипта: удалено пакетов (%s), %s", summary, self.usage_str(),
+                     extra=IMPORTANT)
         elif self._reached(self.target, above=False):
-            log.info("очистка диска: удалено пакетов (%s), теперь %s", summary, self.usage_str())
+            log.info("очистка диска: удалено пакетов (%s), теперь %s", summary, self.usage_str(), extra=IMPORTANT)
         else:
             # чтобы не повторять безуспешную очистку на каждом снимке
             self._next_cleanup_try = time.monotonic() + self.retry_sec

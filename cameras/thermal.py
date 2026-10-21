@@ -1,6 +1,7 @@
 """Термальная камера: захват кадра, матрица температур и хитмап."""
 import io
 import logging
+import os
 from dataclasses import dataclass
 
 import cv2
@@ -39,6 +40,10 @@ def make_heatmap(raw16: np.ndarray, scale: int = 3) -> np.ndarray:
     return cv2.resize(heat, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
 
 
+class FrozenFrame(RuntimeError):
+    """Камера отдаёт один и тот же кадр - зависла, хотя формально работает."""
+
+
 class ThermalCamera:
     """Камера отдаёт кадр 256x384 YUYV: верхняя половина - картинка, нижняя - сырые данные температур."""
 
@@ -48,9 +53,14 @@ class ThermalCamera:
         self.height = height
         self.flush_frames = flush_frames  # сколько старых кадров выбросить перед съёмкой
         self._cap: cv2.VideoCapture | None = None
+        self._last_raw: np.ndarray | None = None  # для проверки «замёрзшей» камеры
 
     # --- жизненный цикл ---
     def open(self) -> None:
+        if self.device.startswith("/dev/") and not os.path.exists(self.device):
+            raise RuntimeError(
+                f"нет устройства {self.device} - термокамера отключена или после переподключения USB получила "
+                f"другое имя. Надёжнее указать в THERMAL_DEVICE постоянный путь из /dev/v4l/by-id/")
         cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
         if not cap.isOpened():
             cap = cv2.VideoCapture(self.device)
@@ -62,12 +72,16 @@ class ThermalCamera:
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height * 2)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         self._cap = cap
-        log.info("термальная камера открыта: %s", self.device)
+        self._last_raw = None
+        log.info("термальная камера открыта: %s, кадр %dx%d (ожидается %dx%d: картинка + температуры)",
+                 self.device, cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT),
+                 self.width, self.height * 2)
 
     def close(self) -> None:
         if self._cap is not None:
             self._cap.release()
             self._cap = None
+            log.debug("термальная камера закрыта")
 
     def __enter__(self):
         self.open()
@@ -87,7 +101,12 @@ class ThermalCamera:
         ok, frame = self._cap.read()
         if not ok or frame is None:
             raise RuntimeError("термальная камера не вернула кадр")
-        return self._frame_to_shot(frame)
+        shot = self._frame_to_shot(frame)
+        # живой сенсор не даёт два побитно одинаковых кадра с разницей в секунды
+        if self._last_raw is not None and np.array_equal(shot.raw16, self._last_raw):
+            raise FrozenFrame("термокамера отдаёт тот же кадр, что и в прошлый раз (зависла)")
+        self._last_raw = shot.raw16
+        return shot
 
     def _frame_to_shot(self, frame: np.ndarray) -> ThermalShot:
         expected = (self.height * 2, self.width, 2)

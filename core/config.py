@@ -52,6 +52,15 @@ THERMAL_HEIGHT = 192
 # --- Режим съёмки ---
 # пауза между пакетами снимков внутри окна работы
 INTERVAL_SEC = float(os.environ.get("INTERVAL_SEC", 10))
+# сколько пакетов может ждать загрузки в S3; если сеть не успевает, следующие пакеты остаются
+# на диске и уйдут догрузкой вне окна (иначе очередь в памяти росла бы без предела)
+MAX_PENDING_UPLOADS = int(os.environ.get("MAX_PENDING_UPLOADS", 6))
+
+# --- Защита от сбоев (подробности в documentation/cornercases.md) ---
+# если основной цикл не делал шагов дольше этого (сек) - скрипт завис, процесс перезапускается
+WATCHDOG_TIMEOUT_SEC = float(os.environ.get("WATCHDOG_TIMEOUT_SEC", 600))
+# сколько при запуске ждать синхронизации времени по NTP (сек), прежде чем начать работу с часами Pi
+CLOCK_SYNC_WAIT_SEC = float(os.environ.get("CLOCK_SYNC_WAIT_SEC", 300))
 
 
 def time_windows():
@@ -79,8 +88,12 @@ def local_drive():
                       min_free=parse_size(DRIVE_MIN_FREE, "DRIVE_MIN_FREE"))
 
 
-# --- Логи ---
-# файлы логов по дням на Pi; по умолчанию папка logs в корне проекта
+# --- Логи (core/log_storage.py, подробности в documentation/logging.md) ---
+# очередь ещё не отправленных логов на Pi; по умолчанию папка logs в корне проекта
 LOG_DIR = Path(os.environ.get("LOG_DIR") or PROJECT_DIR / "logs")
-# папка логов в бакете: <LOG_S3_PREFIX>/<hostname>/<дата>.log
+# папка логов в бакете: <LOG_S3_PREFIX>/<hostname>/<дата>/<ЧЧ-ММ-СС>.log и .../status.json
 LOG_S3_PREFIX = os.environ.get("LOG_S3_PREFIX", "logs")
+# подробность логов: INFO (обычно) или DEBUG (каждый шаг - для поиска проблем, больше трафика)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").strip().upper() or "INFO"
+# как часто отправлять логи и status.json в S3, секунд
+LOG_UPLOAD_INTERVAL_SEC = float(os.environ.get("LOG_UPLOAD_INTERVAL_SEC", 300))
